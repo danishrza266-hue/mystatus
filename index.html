@@ -194,7 +194,11 @@ async function saveStatus(text){
   } catch(e){ say("Could not save: " + (e.code || e.message), true); }
   clearTimeout(timer);
 }
-$("saveBtn").onclick = () => saveStatus($("st").value);
+$("saveBtn").onclick = () => {
+  const t = $("st").value.trim();
+  if(!t){ say("Type a status first, or tap a quick option", true); return; }
+  saveStatus(t);
+};
 $("clearBtn").onclick = () => saveStatus("");
 
 $("myCircle").onclick = () => $("pf").click();
