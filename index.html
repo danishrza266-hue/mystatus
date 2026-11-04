@@ -78,6 +78,8 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
   </select>
   <div class="chips" id="chips"></div>
   <button id="saveBtn">Save status</button>
+  <button class="ghost" id="clearBtn">Delete my status</button>
+  <div id="msg" class="time" style="text-align:center;min-height:18px"></div>
   <div id="requests"></div>
 
   <div id="others"></div>
@@ -179,14 +181,21 @@ function drawMe(){
   if(ended) $("ended").innerHTML = `<div>Your status “${esc(me.status)}” has ended.</div>
     <div class="btns"><button data-a="edit">Update status</button><button class="ghost" data-a="clear">Clear it</button></div>`;
 }
+const say = (t, bad) => { const m = $("msg"); m.textContent = t; m.style.color = bad ? "#ff8a80" : "var(--ok)"; };
 async function saveStatus(text){
+  if(!uid){ say("You are not logged in", true); return; }
+  say("Saving…");
+  const timer = setTimeout(() => say("Still trying… check your internet connection", true), 8000);
   try {
     const mins = +$("dur").value;
     await update(ref(db, "users/"+uid), {status:text.trim(), updated:Date.now(), expires: mins ? Date.now()+mins*60000 : 0});
     $("st").value = "";
-  } catch(e){ alert(errMsg(e)); }
+    say(text.trim() ? "Saved ✓" : "Status deleted ✓");
+  } catch(e){ say("Could not save: " + (e.code || e.message), true); }
+  clearTimeout(timer);
 }
 $("saveBtn").onclick = () => saveStatus($("st").value);
+$("clearBtn").onclick = () => saveStatus("");
 
 $("myCircle").onclick = () => $("pf").click();
 $("pf").onchange = e => {
