@@ -11,7 +11,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;min-height:100vh}
 .wrap{max-width:440px;margin:0 auto;padding:20px 18px 60px}
 h1{font-size:22px;margin:8px 0 18px}
-input,button{font:inherit;border-radius:12px;border:1px solid #2c4263;background:var(--card);color:var(--ink);padding:13px 14px;width:100%;margin-bottom:10px}
+input,button,select{font:inherit;border-radius:12px;border:1px solid #2c4263;background:var(--card);color:var(--ink);padding:13px 14px;width:100%;margin-bottom:10px}
 button{background:var(--glow);color:#1b1200;border:0;font-weight:700;cursor:pointer}
 button.ghost{background:transparent;color:var(--mute);border:1px solid #2c4263;font-weight:500}
 .person{text-align:center;margin:22px 0 30px}
@@ -30,6 +30,17 @@ button.ghost{background:transparent;color:var(--mute);border:1px solid #2c4263;f
 h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
 .code{background:var(--card);border-radius:12px;padding:12px 14px;margin:10px 0;color:var(--mute);font-size:14px}
 .code b{color:var(--glow);font-size:20px;letter-spacing:3px}
+.req{background:var(--card);border:1px solid var(--glow);border-radius:14px;padding:12px 14px;margin:12px 0}
+.req .btns{display:flex;gap:8px}
+.req .btns button{margin:10px 0 0}
+.row{display:flex;gap:14px;align-items:center;background:var(--card);border-radius:16px;padding:12px 14px;margin:10px 0}
+.row .circle{width:56px;height:56px;font-size:24px;border-width:3px;margin:0;flex:none;box-shadow:none}
+.row .info{min-width:0;flex:1}
+.row .n{font-weight:600}
+.row .s{word-break:break-word}
+.row .s.empty{color:var(--mute)}
+.row .t{color:var(--mute);font-size:12px;margin-top:2px}
+.row button{width:auto;margin:0;padding:8px 12px;font-size:13px}
 .hide{display:none}
 </style>
 </head>
@@ -56,15 +67,23 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
   </div>
 
   <input id="st" maxlength="200" placeholder="What are you doing right now?">
+  <select id="dur">
+    <option value="60">Show for 1 hour</option>
+    <option value="180">Show for 3 hours</option>
+    <option value="480" selected>Show for 8 hours</option>
+    <option value="1440">Show for 24 hours</option>
+    <option value="0">Until I change it</option>
+  </select>
   <div class="chips" id="chips"></div>
   <button id="saveBtn">Save status</button>
+  <div id="requests"></div>
 
   <div id="others"></div>
 
-  <h2>Show your status to someone</h2>
+  <h2>Connect with someone</h2>
   <input id="fc" maxlength="6" placeholder="Their 6-character code">
-  <button id="addBtn">Add</button>
-  <div class="code">Your code: <b id="myCode">------</b><br>Give this code to your brother. When he adds your code in his app, you will be able to see his status.</div>
+  <button id="addBtn">Send request</button>
+  <div class="code">Your code: <b id="myCode">------</b><br>Share this code with your family. When someone enters it, you get a request. After you approve, you can see each other's status.</div>
   <button class="ghost" id="outBtn">Log out</button>
 </div>
 
@@ -73,7 +92,7 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import {getDatabase,ref,get,set,update,onValue} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import {getDatabase,ref,get,set,update,remove,onValue} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDL8nJnqWml4r12w1LusgI6bqBmaesIu6Y",
@@ -101,6 +120,7 @@ function ago(t){
   return Math.floor(m/1440)+" days ago";
 }
 const avatar = o => /^data:image\//.test(o.photo||"") ? `<img src="${o.photo}" alt="">` : esc(initial(o.name));
+const live = o => (o.status && (!o.expires || Date.now() < o.expires)) ? o.status : "";
 const initial = n => (n||"?").trim().charAt(0).toUpperCase();
 const errMsg = e => ({
   "auth/invalid-credential":"Wrong email or password",
@@ -110,7 +130,7 @@ const errMsg = e => ({
   "auth/api-key-not-valid.-please-pass-a-valid-api-key.":"Invalid apiKey"
 }[e.code] || ("Error: "+(e.code||e.message)));
 
-let uid = null, me = {}, others = {}, watching = {};
+let uid = null, me = {}, others = {}, watching = {}, reqs = {}, subs = [];
 
 /* ---------- लॉगिन / साइनअप ---------- */
 $("loginBtn").onclick = async () => {
@@ -141,13 +161,15 @@ function drawMe(){
   $("myCircle").innerHTML = avatar(me);
   $("myCode").textContent = me.code || "------";
   const b = $("myBubble");
-  b.textContent = me.status || "Write your status below";
-  b.className = "bubble" + (me.status ? "" : " empty");
+  const st = live(me);
+  b.textContent = st || (me.status ? "Status ended" : "Write your status below");
+  b.className = "bubble" + (st ? "" : " empty");
   $("myTime").textContent = ago(me.updated);
 }
 async function saveStatus(text){
   try {
-    await update(ref(db, "users/"+uid), {status:text.trim(), updated:Date.now()});
+    const mins = +$("dur").value;
+    await update(ref(db, "users/"+uid), {status:text.trim(), updated:Date.now(), expires: mins ? Date.now()+mins*60000 : 0});
     $("st").value = "";
   } catch(e){ alert(errMsg(e)); }
 }
@@ -176,18 +198,31 @@ $("chips").onclick = e => { if(e.target.tagName === "SPAN") saveStatus(e.target.
 
 /* ---------- दूसरों का स्टेटस ---------- */
 function drawOthers(){
-  const ids = Object.keys(others);
+  const ids = Object.keys(others).sort((a,b) => (others[b].updated||0) - (others[a].updated||0));
   $("others").innerHTML = ids.length
-    ? ids.map(id => {
-        const o = others[id];
-        return `<div class="person">
-          <div class="bubble${o.status ? "" : " empty"}">${esc(o.status || "No status yet")}</div>
+    ? "<h2>Everyone's status</h2>" + ids.map(id => {
+        const o = others[id], st = live(o);
+        return `<div class="row">
           <div class="circle sm">${avatar(o)}</div>
-          <div class="name">${esc(o.name)}</div>
-          <div class="time">${esc(ago(o.updated))}</div></div>`;
+          <div class="info">
+            <div class="n">${esc(o.name)}</div>
+            <div class="s${st ? "" : " empty"}">${esc(st || (o.status ? "Status ended" : "No status yet"))}</div>
+            <div class="t">${esc(ago(o.updated))}</div>
+          </div>
+          <button class="ghost" data-id="${esc(id)}">Remove</button></div>`;
       }).join("")
     : "";
 }
+$("others").onclick = async e => {
+  const b = e.target.closest("button");
+  if(!b) return;
+  const id = b.dataset.id, o = others[id] || {};
+  if(!confirm("Remove " + (o.name || "this person") + "? You will stop seeing each other's status.")) return;
+  try {
+    await remove(ref(db, "shares/"+uid+"/"+id));
+    await remove(ref(db, "shares/"+id+"/"+uid));
+  } catch(err){ alert(errMsg(err)); }
+};
 $("addBtn").onclick = async () => {
   const code = $("fc").value.trim().toUpperCase();
   if(code.length !== 6){ alert("Enter the 6-character code"); return; }
@@ -196,27 +231,53 @@ $("addBtn").onclick = async () => {
     if(!snap.exists()){ alert("Code not found"); return; }
     const friend = snap.val();
     if(friend === uid){ alert("That is your own code"); return; }
-    await set(ref(db, "shares/"+friend+"/"+uid), true);
+    await set(ref(db, "requests/"+friend+"/"+uid), {name: me.name || "Someone", time: Date.now()});
     $("fc").value = "";
-    alert("Done! They can now see your status.");
+    alert("Request sent! Once they approve, you will see each other's status.");
   } catch(e){ alert(errMsg(e)); }
 };
 
 /* ---------- लॉगिन स्टेट ---------- */
+function drawRequests(){
+  $("requests").innerHTML = Object.keys(reqs).map(id =>
+    `<div class="req"><div><b>${esc(reqs[id].name)}</b> wants to connect. You will see each other's status.</div>
+     <div class="btns"><button data-a="ok" data-id="${esc(id)}">Approve</button><button class="ghost" data-a="no" data-id="${esc(id)}">Reject</button></div></div>`
+  ).join("");
+}
+$("requests").onclick = async e => {
+  const b = e.target.closest("button");
+  if(!b) return;
+  const id = b.dataset.id;
+  try {
+    if(b.dataset.a === "ok"){
+      await set(ref(db, "shares/"+uid+"/"+id), true);
+      await set(ref(db, "shares/"+id+"/"+uid), true);
+    }
+    await remove(ref(db, "requests/"+uid+"/"+id));
+  } catch(err){ alert(errMsg(err)); }
+};
+
 onAuthStateChanged(auth, user => {
+  subs.forEach(f => f()); subs = [];
+  Object.values(watching).forEach(f => f());
+  me = {}; others = {}; watching = {}; reqs = {};
   uid = user ? user.uid : null;
   $("loginView").classList.toggle("hide", !!user);
   $("mainView").classList.toggle("hide", !user);
-  if(!user){ me = {}; others = {}; watching = {}; return; }
-  onValue(ref(db, "users/"+uid), s => { me = s.val() || {}; drawMe(); });
-  onValue(ref(db, "shares/"+uid), s => {
+  if(!user){ drawOthers(); drawRequests(); return; }
+  subs.push(onValue(ref(db, "users/"+uid), s => { me = s.val() || {}; drawMe(); }));
+  subs.push(onValue(ref(db, "requests/"+uid), s => { reqs = s.val() || {}; drawRequests(); }));
+  subs.push(onValue(ref(db, "shares/"+uid), s => {
     const owners = Object.keys(s.val() || {});
     owners.forEach(o => {
       if(watching[o]) return;
-      watching[o] = true;
-      onValue(ref(db, "users/"+o), x => { if(x.val()){ others[o] = x.val(); drawOthers(); } });
+      watching[o] = onValue(ref(db, "users/"+o), x => { if(x.val()){ others[o] = x.val(); drawOthers(); } });
     });
-  });
+    Object.keys(watching).forEach(o => {
+      if(!owners.includes(o)){ watching[o](); delete watching[o]; delete others[o]; }
+    });
+    drawOthers();
+  }));
 });
 setInterval(() => { drawMe(); drawOthers(); }, 60000);
 </script>
