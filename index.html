@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0f1b2d">
-<title>माय स्टेटस</title>
+<title>My Status</title>
 <style>
 :root{--bg:#0f1b2d;--card:#182840;--ink:#eaf0f7;--mute:#8fa3bd;--glow:#ffb347;--ok:#5ed39a}
 *{box-sizing:border-box}
@@ -34,12 +34,12 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
 <div class="wrap">
 
 <div id="loginView" class="hide">
-  <h1>माय स्टेटस</h1>
-  <input id="nm" placeholder="आपका नाम (सिर्फ नए अकाउंट के लिए)">
-  <input id="em" type="email" placeholder="ईमेल">
-  <input id="pw" type="password" placeholder="पासवर्ड (कम से कम 6 अक्षर)">
-  <button id="loginBtn">लॉगिन करें</button>
-  <button id="signupBtn" class="ghost">नया अकाउंट बनाएँ</button>
+  <h1>My Status</h1>
+  <input id="nm" placeholder="Your name (only for a new account)">
+  <input id="em" type="email" placeholder="Email">
+  <input id="pw" type="password" placeholder="Password (at least 6 characters)">
+  <button id="loginBtn">Log in</button>
+  <button id="signupBtn" class="ghost">Create new account</button>
 </div>
 
 <div id="mainView" class="hide">
@@ -50,17 +50,17 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
     <div class="time" id="myTime"></div>
   </div>
 
-  <input id="st" maxlength="200" placeholder="अभी क्या कर रहे हैं?">
+  <input id="st" maxlength="200" placeholder="What are you doing right now?">
   <div class="chips" id="chips"></div>
-  <button id="saveBtn">स्टेटस सेव करें</button>
+  <button id="saveBtn">Save status</button>
 
   <div id="others"></div>
 
-  <h2>अपना स्टेटस किसी को दिखाएँ</h2>
-  <input id="fc" maxlength="6" placeholder="उनका 6 अक्षर वाला कोड">
-  <button id="addBtn">जोड़ें</button>
-  <div class="code">आपका कोड: <b id="myCode">------</b><br>यह कोड भाई को दें, वो भी आपको अपने ऐप में जोड़ेगा तभी आप उसका स्टेटस देख पाएँगे।</div>
-  <button class="ghost" id="outBtn">लॉग आउट</button>
+  <h2>Show your status to someone</h2>
+  <input id="fc" maxlength="6" placeholder="Their 6-character code">
+  <button id="addBtn">Add</button>
+  <div class="code">Your code: <b id="myCode">------</b><br>Give this code to your brother. When he adds your code in his app, you will be able to see his status.</div>
+  <button class="ghost" id="outBtn">Log out</button>
 </div>
 
 </div>
@@ -85,24 +85,24 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const QUICK = ["सो रहा हूँ 😴","बाहर गया हूँ 🚶","काम में हूँ 💼","खाना खा रहा हूँ 🍽️","फ्री हूँ, कॉल कर सकते हो 📞"];
+const QUICK = ["Sleeping 😴","Out for a walk 🚶","At work 💼","Eating 🍽️","Free, you can call 📞"];
 
 function ago(t){
   if(!t) return "";
   const m = Math.floor((Date.now()-t)/60000);
-  if(m < 1) return "अभी अभी";
-  if(m < 60) return m+" मिनट पहले";
-  if(m < 1440) return Math.floor(m/60)+" घंटे पहले";
-  return Math.floor(m/1440)+" दिन पहले";
+  if(m < 1) return "Just now";
+  if(m < 60) return m+" min ago";
+  if(m < 1440) return Math.floor(m/60)+" hr ago";
+  return Math.floor(m/1440)+" days ago";
 }
 const initial = n => (n||"?").trim().charAt(0).toUpperCase();
 const errMsg = e => ({
-  "auth/invalid-credential":"ईमेल या पासवर्ड गलत है",
-  "auth/email-already-in-use":"यह ईमेल पहले से रजिस्टर है, लॉगिन करें",
-  "auth/weak-password":"पासवर्ड कम से कम 6 अक्षर का रखें",
-  "auth/invalid-email":"ईमेल सही नहीं है",
-  "auth/api-key-not-valid.-please-pass-a-valid-api-key.":"apiKey गलत है"
-}[e.code] || ("एरर: "+(e.code||e.message)));
+  "auth/invalid-credential":"Wrong email or password",
+  "auth/email-already-in-use":"This email is already registered, please log in",
+  "auth/weak-password":"Password must be at least 6 characters",
+  "auth/invalid-email":"Email is not valid",
+  "auth/api-key-not-valid.-please-pass-a-valid-api-key.":"Invalid apiKey"
+}[e.code] || ("Error: "+(e.code||e.message)));
 
 let uid = null, me = {}, others = {}, watching = {};
 
@@ -113,7 +113,7 @@ $("loginBtn").onclick = async () => {
 };
 $("signupBtn").onclick = async () => {
   const name = $("nm").value.trim();
-  if(!name){ alert("पहले अपना नाम लिखें"); return; }
+  if(!name){ alert("Please enter your name first"); return; }
   try {
     const cred = await createUserWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value);
     const id = cred.user.uid;
@@ -135,7 +135,7 @@ function drawMe(){
   $("myCircle").textContent = initial(me.name);
   $("myCode").textContent = me.code || "------";
   const b = $("myBubble");
-  b.textContent = me.status || "अपना स्टेटस नीचे लिखें";
+  b.textContent = me.status || "Write your status below";
   b.className = "bubble" + (me.status ? "" : " empty");
   $("myTime").textContent = ago(me.updated);
 }
@@ -156,7 +156,7 @@ function drawOthers(){
     ? ids.map(id => {
         const o = others[id];
         return `<div class="person">
-          <div class="bubble${o.status ? "" : " empty"}">${esc(o.status || "अभी कुछ नहीं लिखा")}</div>
+          <div class="bubble${o.status ? "" : " empty"}">${esc(o.status || "No status yet")}</div>
           <div class="circle sm">${esc(initial(o.name))}</div>
           <div class="name">${esc(o.name)}</div>
           <div class="time">${esc(ago(o.updated))}</div></div>`;
@@ -165,15 +165,15 @@ function drawOthers(){
 }
 $("addBtn").onclick = async () => {
   const code = $("fc").value.trim().toUpperCase();
-  if(code.length !== 6){ alert("6 अक्षर का कोड डालें"); return; }
+  if(code.length !== 6){ alert("Enter the 6-character code"); return; }
   try {
     const snap = await get(ref(db, "codes/"+code));
-    if(!snap.exists()){ alert("यह कोड नहीं मिला"); return; }
+    if(!snap.exists()){ alert("Code not found"); return; }
     const friend = snap.val();
-    if(friend === uid){ alert("यह आपका ही कोड है"); return; }
+    if(friend === uid){ alert("That is your own code"); return; }
     await set(ref(db, "shares/"+friend+"/"+uid), true);
     $("fc").value = "";
-    alert("हो गया! अब उन्हें आपका स्टेटस दिखेगा।");
+    alert("Done! They can now see your status.");
   } catch(e){ alert(errMsg(e)); }
 };
 
