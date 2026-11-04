@@ -49,6 +49,7 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
 
 <div id="loginView" class="hide">
   <h1>My Status</h1>
+  <div id="inviteNote" class="code hide">You were invited! Log in or create an account, and a connect request will be sent automatically.</div>
   <input id="nm" placeholder="Your name (only for a new account)">
   <input id="em" type="email" placeholder="Email">
   <input id="pw" type="password" placeholder="Password (at least 6 characters)">
@@ -57,6 +58,7 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
 </div>
 
 <div id="mainView" class="hide">
+  <div id="ended" class="req hide"></div>
   <div class="person">
     <div class="bubble" id="myBubble"></div>
     <div class="circle" id="myCircle"></div>
@@ -84,6 +86,7 @@ h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
   <input id="fc" maxlength="6" placeholder="Their 6-character code">
   <button id="addBtn">Send request</button>
   <div class="code">Your code: <b id="myCode">------</b><br>Share this code with your family. When someone enters it, you get a request. After you approve, you can see each other's status.</div>
+  <button id="shareBtn">Share invite link</button>
   <button class="ghost" id="outBtn">Log out</button>
 </div>
 
@@ -109,6 +112,12 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+try {
+  const c = new URLSearchParams(location.search).get("code");
+  if(c && /^[A-Za-z0-9]{6}$/.test(c)) localStorage.setItem("pendingCode", c.toUpperCase());
+  if(c) history.replaceState(null, "", location.pathname);
+  if(localStorage.getItem("pendingCode")) $("inviteNote").classList.remove("hide");
+} catch(e){}
 const QUICK = ["Sleeping 😴","Out for a walk 🚶","At work 💼","Eating 🍽️","Free, you can call 📞"];
 
 function ago(t){
@@ -165,6 +174,10 @@ function drawMe(){
   b.textContent = st || (me.status ? "Status ended" : "Write your status below");
   b.className = "bubble" + (st ? "" : " empty");
   $("myTime").textContent = ago(me.updated);
+  const ended = me.status && me.expires && Date.now() >= me.expires;
+  $("ended").classList.toggle("hide", !ended);
+  if(ended) $("ended").innerHTML = `<div>Your status “${esc(me.status)}” has ended.</div>
+    <div class="btns"><button data-a="edit">Update status</button><button class="ghost" data-a="clear">Clear it</button></div>`;
 }
 async function saveStatus(text){
   try {
@@ -237,6 +250,40 @@ $("addBtn").onclick = async () => {
   } catch(e){ alert(errMsg(e)); }
 };
 
+$("ended").onclick = async e => {
+  const b = e.target.closest("button");
+  if(!b) return;
+  if(b.dataset.a === "edit"){ $("st").focus(); $("st").scrollIntoView({behavior:"smooth", block:"center"}); return; }
+  try { await update(ref(db, "users/"+uid), {status:"", expires:0, updated:Date.now()}); }
+  catch(err){ alert(errMsg(err)); }
+};
+
+$("shareBtn").onclick = async () => {
+  if(!me.code) return;
+  const url = location.origin + location.pathname.replace(/index\.html$/, "") + "?code=" + me.code;
+  try {
+    if(navigator.share){ await navigator.share({title:"My Status", text:"Connect with me on My Status", url}); return; }
+  } catch(e){ return; }
+  try { await navigator.clipboard.writeText(url); alert("Invite link copied:\n"+url); }
+  catch(e){ prompt("Copy this invite link:", url); }
+};
+
+async function processPending(){
+  let code = null;
+  try { code = localStorage.getItem("pendingCode"); } catch(e){}
+  if(!code || !uid || !me.name) return;
+  try { localStorage.removeItem("pendingCode"); } catch(e){}
+  try {
+    const snap = await get(ref(db, "codes/"+code));
+    if(!snap.exists()){ alert("This invite link is not valid"); return; }
+    const friend = snap.val();
+    if(friend === uid) return;
+    if((await get(ref(db, "shares/"+uid+"/"+friend))).exists()){ alert("You are already connected"); return; }
+    await set(ref(db, "requests/"+friend+"/"+uid), {name: me.name, time: Date.now()});
+    alert("Request sent! Once they approve, you will see each other's status.");
+  } catch(e){ alert(errMsg(e)); }
+}
+
 /* ---------- लॉगिन स्टेट ---------- */
 function drawRequests(){
   $("requests").innerHTML = Object.keys(reqs).map(id =>
@@ -265,7 +312,7 @@ onAuthStateChanged(auth, user => {
   $("loginView").classList.toggle("hide", !!user);
   $("mainView").classList.toggle("hide", !user);
   if(!user){ drawOthers(); drawRequests(); return; }
-  subs.push(onValue(ref(db, "users/"+uid), s => { me = s.val() || {}; drawMe(); }));
+  subs.push(onValue(ref(db, "users/"+uid), s => { me = s.val() || {}; drawMe(); processPending(); }));
   subs.push(onValue(ref(db, "requests/"+uid), s => { reqs = s.val() || {}; drawRequests(); }));
   subs.push(onValue(ref(db, "shares/"+uid), s => {
     const owners = Object.keys(s.val() || {});
