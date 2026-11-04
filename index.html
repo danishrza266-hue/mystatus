@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f1b2d">
+<title>माय स्टेटस</title>
+<style>
+:root{--bg:#0f1b2d;--card:#182840;--ink:#eaf0f7;--mute:#8fa3bd;--glow:#ffb347;--ok:#5ed39a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;min-height:100vh}
+.wrap{max-width:440px;margin:0 auto;padding:20px 18px 60px}
+h1{font-size:22px;margin:8px 0 18px}
+input,button{font:inherit;border-radius:12px;border:1px solid #2c4263;background:var(--card);color:var(--ink);padding:13px 14px;width:100%;margin-bottom:10px}
+button{background:var(--glow);color:#1b1200;border:0;font-weight:700;cursor:pointer}
+button.ghost{background:transparent;color:var(--mute);border:1px solid #2c4263;font-weight:500}
+.person{text-align:center;margin:22px 0 30px}
+.bubble{display:inline-block;max-width:92%;background:var(--card);border:1px solid #2c4263;border-radius:16px;padding:12px 16px;font-size:17px;line-height:1.4;position:relative;margin-bottom:16px;word-break:break-word}
+.bubble:after{content:"";position:absolute;left:50%;bottom:-8px;width:14px;height:14px;background:var(--card);border-right:1px solid #2c4263;border-bottom:1px solid #2c4263;transform:translateX(-50%) rotate(45deg)}
+.bubble.empty{color:var(--mute)}
+.circle{width:128px;height:128px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:52px;font-weight:700;background:#21395c;border:4px solid var(--glow);box-shadow:0 0 34px rgba(255,179,71,.35)}
+.circle.sm{width:92px;height:92px;font-size:36px;border-color:var(--ok);box-shadow:0 0 22px rgba(94,211,154,.25)}
+.name{margin-top:12px;font-size:18px;font-weight:600}
+.time{color:var(--mute);font-size:13px;margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.chips span{background:var(--card);border:1px solid #2c4263;border-radius:99px;padding:8px 13px;font-size:14px;cursor:pointer}
+h2{font-size:16px;color:var(--mute);font-weight:500;margin:30px 0 4px}
+.code{background:var(--card);border-radius:12px;padding:12px 14px;margin:10px 0;color:var(--mute);font-size:14px}
+.code b{color:var(--glow);font-size:20px;letter-spacing:3px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="loginView" class="hide">
+  <h1>माय स्टेटस</h1>
+  <input id="nm" placeholder="आपका नाम (सिर्फ नए अकाउंट के लिए)">
+  <input id="em" type="email" placeholder="ईमेल">
+  <input id="pw" type="password" placeholder="पासवर्ड (कम से कम 6 अक्षर)">
+  <button id="loginBtn">लॉगिन करें</button>
+  <button id="signupBtn" class="ghost">नया अकाउंट बनाएँ</button>
+</div>
+
+<div id="mainView" class="hide">
+  <div class="person">
+    <div class="bubble" id="myBubble"></div>
+    <div class="circle" id="myCircle"></div>
+    <div class="name" id="myName"></div>
+    <div class="time" id="myTime"></div>
+  </div>
+
+  <input id="st" maxlength="200" placeholder="अभी क्या कर रहे हैं?">
+  <div class="chips" id="chips"></div>
+  <button id="saveBtn">स्टेटस सेव करें</button>
+
+  <div id="others"></div>
+
+  <h2>अपना स्टेटस किसी को दिखाएँ</h2>
+  <input id="fc" maxlength="6" placeholder="उनका 6 अक्षर वाला कोड">
+  <button id="addBtn">जोड़ें</button>
+  <div class="code">आपका कोड: <b id="myCode">------</b><br>यह कोड भाई को दें, वो भी आपको अपने ऐप में जोड़ेगा तभी आप उसका स्टेटस देख पाएँगे।</div>
+  <button class="ghost" id="outBtn">लॉग आउट</button>
+</div>
+
+</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getDatabase,ref,get,set,update,onValue} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDL8nJnqWml4r12w1LusgI6bqBmaesIu6Y",
+  authDomain: "mystatus-128f6.firebaseapp.com",
+  databaseURL: "https://mystatus-128f6-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "mystatus-128f6",
+  storageBucket: "mystatus-128f6.firebasestorage.app",
+  messagingSenderId: "739510969973",
+  appId: "1:739510969973:web:205c9a5cfc1e6f8bd0fa3c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const QUICK = ["सो रहा हूँ 😴","बाहर गया हूँ 🚶","काम में हूँ 💼","खाना खा रहा हूँ 🍽️","फ्री हूँ, कॉल कर सकते हो 📞"];
+
+function ago(t){
+  if(!t) return "";
+  const m = Math.floor((Date.now()-t)/60000);
+  if(m < 1) return "अभी अभी";
+  if(m < 60) return m+" मिनट पहले";
+  if(m < 1440) return Math.floor(m/60)+" घंटे पहले";
+  return Math.floor(m/1440)+" दिन पहले";
+}
+const initial = n => (n||"?").trim().charAt(0).toUpperCase();
+const errMsg = e => ({
+  "auth/invalid-credential":"ईमेल या पासवर्ड गलत है",
+  "auth/email-already-in-use":"यह ईमेल पहले से रजिस्टर है, लॉगिन करें",
+  "auth/weak-password":"पासवर्ड कम से कम 6 अक्षर का रखें",
+  "auth/invalid-email":"ईमेल सही नहीं है",
+  "auth/api-key-not-valid.-please-pass-a-valid-api-key.":"apiKey गलत है"
+}[e.code] || ("एरर: "+(e.code||e.message)));
+
+let uid = null, me = {}, others = {}, watching = {};
+
+/* ---------- लॉगिन / साइनअप ---------- */
+$("loginBtn").onclick = async () => {
+  try { await signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value); }
+  catch(e){ alert(errMsg(e)); }
+};
+$("signupBtn").onclick = async () => {
+  const name = $("nm").value.trim();
+  if(!name){ alert("पहले अपना नाम लिखें"); return; }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value);
+    const id = cred.user.uid;
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code, taken = true;
+    while(taken){
+      code = Array.from({length:6}, () => chars[Math.floor(Math.random()*chars.length)]).join("");
+      taken = (await get(ref(db, "codes/"+code))).exists();
+    }
+    await set(ref(db, "codes/"+code), id);
+    await set(ref(db, "users/"+id), {name, code, status:"", updated:0});
+  } catch(e){ alert(errMsg(e)); }
+};
+$("outBtn").onclick = () => signOut(auth);
+
+/* ---------- मेरा स्टेटस ---------- */
+function drawMe(){
+  $("myName").textContent = me.name || "";
+  $("myCircle").textContent = initial(me.name);
+  $("myCode").textContent = me.code || "------";
+  const b = $("myBubble");
+  b.textContent = me.status || "अपना स्टेटस नीचे लिखें";
+  b.className = "bubble" + (me.status ? "" : " empty");
+  $("myTime").textContent = ago(me.updated);
+}
+async function saveStatus(text){
+  try {
+    await update(ref(db, "users/"+uid), {status:text.trim(), updated:Date.now()});
+    $("st").value = "";
+  } catch(e){ alert(errMsg(e)); }
+}
+$("saveBtn").onclick = () => saveStatus($("st").value);
+$("chips").innerHTML = QUICK.map(q => `<span>${esc(q)}</span>`).join("");
+$("chips").onclick = e => { if(e.target.tagName === "SPAN") saveStatus(e.target.textContent); };
+
+/* ---------- दूसरों का स्टेटस ---------- */
+function drawOthers(){
+  const ids = Object.keys(others);
+  $("others").innerHTML = ids.length
+    ? ids.map(id => {
+        const o = others[id];
+        return `<div class="person">
+          <div class="bubble${o.status ? "" : " empty"}">${esc(o.status || "अभी कुछ नहीं लिखा")}</div>
+          <div class="circle sm">${esc(initial(o.name))}</div>
+          <div class="name">${esc(o.name)}</div>
+          <div class="time">${esc(ago(o.updated))}</div></div>`;
+      }).join("")
+    : "";
+}
+$("addBtn").onclick = async () => {
+  const code = $("fc").value.trim().toUpperCase();
+  if(code.length !== 6){ alert("6 अक्षर का कोड डालें"); return; }
+  try {
+    const snap = await get(ref(db, "codes/"+code));
+    if(!snap.exists()){ alert("यह कोड नहीं मिला"); return; }
+    const friend = snap.val();
+    if(friend === uid){ alert("यह आपका ही कोड है"); return; }
+    await set(ref(db, "shares/"+friend+"/"+uid), true);
+    $("fc").value = "";
+    alert("हो गया! अब उन्हें आपका स्टेटस दिखेगा।");
+  } catch(e){ alert(errMsg(e)); }
+};
+
+/* ---------- लॉगिन स्टेट ---------- */
+onAuthStateChanged(auth, user => {
+  uid = user ? user.uid : null;
+  $("loginView").classList.toggle("hide", !!user);
+  $("mainView").classList.toggle("hide", !user);
+  if(!user){ me = {}; others = {}; watching = {}; return; }
+  onValue(ref(db, "users/"+uid), s => { me = s.val() || {}; drawMe(); });
+  onValue(ref(db, "shares/"+uid), s => {
+    const owners = Object.keys(s.val() || {});
+    owners.forEach(o => {
+      if(watching[o]) return;
+      watching[o] = true;
+      onValue(ref(db, "users/"+o), x => { if(x.val()){ others[o] = x.val(); drawOthers(); } });
+    });
+  });
+});
+setInterval(() => { drawMe(); drawOthers(); }, 60000);
+</script>
+</body>
+</html>
